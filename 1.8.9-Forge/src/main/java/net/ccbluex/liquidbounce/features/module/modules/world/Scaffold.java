@@ -92,6 +92,7 @@ public class Scaffold extends Module {
 
     // Rotations
     private final BoolValue rotationsValue = new BoolValue("Rotations", true);
+    private final IntegerValue keepLengthValue = new IntegerValue("KeepRotationLength", 0, 0, 20);
     private final BoolValue keepRotationValue = new BoolValue("KeepRotation", false);
 
     // Zitter
@@ -106,6 +107,7 @@ public class Scaffold extends Module {
 
     // Safety
     private final BoolValue sameYValue = new BoolValue("SameY", false);
+    private final BoolValue safeWalkValue = new BoolValue("SafeWalk", true);
     private final BoolValue airSafeValue = new BoolValue("AirSafe", false);
 
     // Visuals
@@ -117,9 +119,7 @@ public class Scaffold extends Module {
      */
 
     // Target block
-    private BlockPos targetBlock;
-    private EnumFacing targetFacing;
-    private Vec3 targetVec;
+    private PlaceInfo targetPlace;
 
     // Launch position
     private int launchY;
@@ -257,10 +257,15 @@ public class Scaffold extends Module {
         if (placeModeValue.get().equalsIgnoreCase(eventState.getStateName()))
             place();
 
-        if (eventState == EventState.PRE)
-            findBlock(mode.equalsIgnoreCase("expand"));
+        if (eventState == EventState.PRE) {
+            if (autoBlockValue.get() ? InventoryUtils.findAutoBlockBlock() == -1 : mc.thePlayer.getHeldItem() == null ||
+                    !(mc.thePlayer.getHeldItem().getItem() instanceof ItemBlock))
+                return;
 
-        if (targetBlock == null || targetFacing == null || targetVec == null) {
+            findBlock(mode.equalsIgnoreCase("expand"));
+        }
+
+        if (targetPlace == null) {
             if (placeableDelay.get())
                 delayTimer.reset();
         }
@@ -298,7 +303,7 @@ public class Scaffold extends Module {
      * Place target block
      */
     private void place() {
-        if (targetBlock == null || targetFacing == null || targetVec == null) {
+        if (targetPlace == null) {
             if (placeableDelay.get())
                 delayTimer.reset();
             return;
@@ -307,7 +312,7 @@ public class Scaffold extends Module {
         if (!delayTimer.hasTimePassed(delay) || (sameYValue.get() && launchY != (int) mc.thePlayer.posY))
             return;
 
-        int blockSlot = Integer.MAX_VALUE;
+        int blockSlot = -1;
         ItemStack itemStack = mc.thePlayer.getHeldItem();
 
         if (mc.thePlayer.getHeldItem() == null || !(mc.thePlayer.getHeldItem().getItem() instanceof ItemBlock)) {
@@ -323,7 +328,8 @@ public class Scaffold extends Module {
             itemStack = mc.thePlayer.inventoryContainer.getSlot(blockSlot).getStack();
         }
 
-        if (mc.playerController.onPlayerRightClick(mc.thePlayer, mc.theWorld, itemStack, targetBlock, targetFacing, targetVec)) {
+        if (mc.playerController.onPlayerRightClick(mc.thePlayer, mc.theWorld, itemStack, targetPlace.getBlockPos(),
+                targetPlace.getEnumFacing(), targetPlace.getVec3())) {
             delayTimer.reset();
             delay = TimeUtils.randomDelay(minDelayValue.get(), maxDelayValue.get());
 
@@ -340,13 +346,11 @@ public class Scaffold extends Module {
                 mc.getNetHandler().addToSendQueue(new C0APacketAnimation());
         }
 
-        if (!stayAutoBlock.get() && blockSlot != Integer.MAX_VALUE)
+        if (!stayAutoBlock.get() && blockSlot >= 0)
             mc.getNetHandler().addToSendQueue(new C09PacketHeldItemChange(mc.thePlayer.inventory.currentItem));
 
         // Reset
-        this.targetBlock = null;
-        this.targetFacing = null;
-        this.targetVec = null;
+        this.targetPlace = null;
     }
 
     /**
@@ -383,6 +387,9 @@ public class Scaffold extends Module {
      */
     @EventTarget
     public void onMove(final MoveEvent event) {
+        if (!safeWalkValue.get())
+            return;
+
         if(airSafeValue.get() || mc.thePlayer.onGround)
             event.setSafeWalk(true);
     }
@@ -398,7 +405,7 @@ public class Scaffold extends Module {
             GlStateManager.pushMatrix();
 
             final BlockOverlay blockOverlay = (BlockOverlay) ModuleManager.getModule(BlockOverlay.class);
-            if(blockOverlay.getState() && blockOverlay.infoValue.get() && mc.objectMouseOver != null && mc.objectMouseOver.getBlockPos() != null && mc.theWorld.getBlockState(mc.objectMouseOver.getBlockPos()).getBlock() != null && BlockUtils.canBeClicked(mc.objectMouseOver.getBlockPos()) && mc.theWorld.getWorldBorder().contains(mc.objectMouseOver.getBlockPos()))
+            if (blockOverlay.getState() && blockOverlay.getInfoValue().get() && blockOverlay.getCurrentBlock() != null)
                 GlStateManager.translate(0, 15F, 0);
 
             final String info = "Blocks: §7" + getBlocksAmount();
@@ -494,15 +501,11 @@ public class Scaffold extends Module {
         if(placeRotation == null) return false;
 
         if (rotationsValue.get()) {
-            RotationUtils.setTargetRotation(placeRotation.getRotation());
+            RotationUtils.setTargetRotation(placeRotation.getRotation(), keepLengthValue.get());
             lockRotation = placeRotation.getRotation();
         }
 
-        final PlaceInfo placeInfo = placeRotation.getPlaceInfo();
-
-        targetBlock = placeInfo.getBlockPos();
-        targetFacing = placeInfo.getEnumFacing();
-        targetVec = placeInfo.getVec3();
+        targetPlace = placeRotation.getPlaceInfo();
         return true;
     }
 

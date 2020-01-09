@@ -13,6 +13,7 @@ import net.minecraft.network.play.client.C03PacketPlayer;
 import net.minecraft.util.*;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Random;
 
@@ -231,6 +232,7 @@ public final class RotationUtils extends MinecraftInstance implements Listenable
      * @param turnSpeed your turn speed
      * @return limited rotation
      */
+    @NotNull
     public static Rotation limitAngleChange(final Rotation currentRotation, final Rotation targetRotation, final float turnSpeed) {
         final float yawDifference = getAngleDifference(targetRotation.getYaw(), currentRotation.getYaw());
         final float pitchDifference = getAngleDifference(targetRotation.getPitch(), currentRotation.getPitch());
@@ -294,10 +296,9 @@ public final class RotationUtils extends MinecraftInstance implements Listenable
     @EventTarget
     public void onTick(final TickEvent event) {
         if(targetRotation != null) {
-            keepLength++;
+            keepLength--;
 
-            // Advanced Anti Cheat, huh
-            if(keepLength > 15)
+            if (keepLength <= 0)
                 reset();
         }
 
@@ -334,22 +335,22 @@ public final class RotationUtils extends MinecraftInstance implements Listenable
      * @param rotation your target rotation
      */
     public static void setTargetRotation(final Rotation rotation) {
+        setTargetRotation(rotation, 0);
+    }
+
+    /**
+     * Set your target rotation
+     *
+     * @param rotation your target rotation
+     */
+    public static void setTargetRotation(final Rotation rotation, final int keepLength) {
         if(Double.isNaN(rotation.getYaw()) || Double.isNaN(rotation.getPitch())
                 || rotation.getPitch() > 90 || rotation.getPitch() < -90)
             return;
 
+        rotation.fixedSensitivity(mc.gameSettings.mouseSensitivity);
         targetRotation = rotation;
-        keepLength = 0;
-    }
-
-    /**
-     * Set current server rotation as target rotation
-     */
-    public static void setToServerRotation() {
-        if(serverRotation == null) return;
-
-        targetRotation = serverRotation;
-        keepLength = 0;
+        RotationUtils.keepLength = keepLength;
     }
 
     /**

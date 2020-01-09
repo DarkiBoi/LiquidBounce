@@ -1,34 +1,57 @@
 package net.ccbluex.liquidbounce.ui.client.hud.element.elements
 
 import net.ccbluex.liquidbounce.LiquidBounce
-import net.ccbluex.liquidbounce.ui.client.hud.GuiHudDesigner
+import net.ccbluex.liquidbounce.ui.client.hud.designer.GuiHudDesigner
+import net.ccbluex.liquidbounce.ui.client.hud.element.Border
 import net.ccbluex.liquidbounce.ui.client.hud.element.Element
 import net.ccbluex.liquidbounce.ui.client.hud.element.ElementInfo
+import net.ccbluex.liquidbounce.ui.client.hud.element.Side
 import net.ccbluex.liquidbounce.ui.font.Fonts
 import net.ccbluex.liquidbounce.utils.EntityUtils
 import net.ccbluex.liquidbounce.utils.ServerUtils
-import net.ccbluex.liquidbounce.utils.misc.StringUtils
 import net.ccbluex.liquidbounce.utils.render.ColorUtils
-import net.ccbluex.liquidbounce.utils.render.RenderUtils
 import net.ccbluex.liquidbounce.value.BoolValue
+import net.ccbluex.liquidbounce.value.FontValue
 import net.ccbluex.liquidbounce.value.IntegerValue
 import net.ccbluex.liquidbounce.value.TextValue
 import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.FontRenderer
 import net.minecraft.util.ChatAllowedCharacters
 import org.lwjgl.input.Keyboard
 import java.awt.Color
+import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 
 /**
- * LiquidBounce Hacked Client
- * A minecraft forge injection client using Mixin
+ * CustomHUD text element
  *
- * @game Minecraft
- * @author CCBlueX
+ * Allows to draw custom text
  */
 @ElementInfo(name = "Text")
-class Text : Element() {
+class Text(x: Double = 10.0, y: Double = 10.0, scale: Float = 1F,
+           side: Side = Side.default()) : Element(x, y, scale, side) {
+
+    companion object {
+
+        val DATE_FORMAT = SimpleDateFormat("yyyy-MM-dd")
+        val HOUR_FORMAT = SimpleDateFormat("HH:mm")
+
+        val DECIMAL_FORMAT = DecimalFormat("#.00")
+
+        /**
+         * Create default element
+         */
+        fun defaultClient(): Text {
+            val text = Text(x = 2.0, y = 2.0, scale = 2F)
+
+            text.displayString.set("%clientName%")
+            text.shadow.set(true)
+            text.fontValue.set(Fonts.font40)
+            text.setColor(Color(0, 111, 255))
+
+            return text
+        }
+
+    }
 
     private val displayString = TextValue("DisplayText", "")
     private val redValue = IntegerValue("Red", 255, 0, 255)
@@ -36,7 +59,7 @@ class Text : Element() {
     private val blueValue = IntegerValue("Blue", 255, 0, 255)
     private val rainbow = BoolValue("Rainbow", false)
     private val shadow = BoolValue("Shadow", true)
-    private var fontRenderer: FontRenderer = Fonts.font40
+    private var fontValue = FontValue("Font", Fonts.font40)
 
     private var editMode = false
     private var editTicks = 0
@@ -46,61 +69,98 @@ class Text : Element() {
 
     private val display: String
         get() {
-            var textContent = if (displayString.get().isEmpty() && !editMode)
+            val textContent = if (displayString.get().isEmpty() && !editMode)
                 "Text Element"
             else
                 displayString.get()
 
-            if (textContent.contains("%")) {
-                textContent = StringUtils.replace(textContent, "%username%", mc.getSession().username)
-                textContent = StringUtils.replace(textContent, "%clientName%", LiquidBounce.CLIENT_NAME)
-                textContent = StringUtils.replace(textContent, "%clientVersion%", "b${LiquidBounce.CLIENT_VERSION}")
-                textContent = StringUtils.replace(textContent, "%clientCreator%", LiquidBounce.CLIENT_CREATOR)
-                textContent = StringUtils.replace(textContent, "%fps%", Minecraft.getDebugFPS().toString())
-                textContent = StringUtils.replace(textContent, "%date%", SimpleDateFormat("yyyy-MM-dd")
-                        .format(System.currentTimeMillis()))
-                textContent = StringUtils.replace(textContent, "%time%", SimpleDateFormat("HH:mm")
-                        .format(System.currentTimeMillis()))
-                textContent = StringUtils.replace(textContent, "%serverIp%", ServerUtils.getRemoteIp())
 
-                if (mc.thePlayer != null) {
-                    textContent = StringUtils.replace(textContent, "%x%", mc.thePlayer.posX.toString())
-                    textContent = StringUtils.replace(textContent, "%y%", mc.thePlayer.posY.toString())
-                    textContent = StringUtils.replace(textContent, "%z%", mc.thePlayer.posZ.toString())
-                    textContent = StringUtils.replace(textContent, "%ping%", EntityUtils.getPing(mc.thePlayer).toString())
-                }
-            }
-
-            return textContent
+            return multiReplace(textContent)
         }
 
-    override fun drawElement() {
-        val color = Color(redValue.get(), greenValue.get(), blueValue.get()).rgb
-        val location = locationFromFacing
+    private fun getReplacement(str: String): String? {
+        if (mc.thePlayer != null) {
+            when (str) {
+                "x" -> return DECIMAL_FORMAT.format(mc.thePlayer.posX)
+                "y" -> return DECIMAL_FORMAT.format(mc.thePlayer.posY)
+                "z" -> return DECIMAL_FORMAT.format(mc.thePlayer.posZ)
+                "xdp" -> return mc.thePlayer.posX.toString()
+                "ydp" -> return mc.thePlayer.posY.toString()
+                "zdp" -> return mc.thePlayer.posZ.toString()
+                "ping" -> return EntityUtils.getPing(mc.thePlayer).toString()
+            }
+        }
 
-        fontRenderer.drawString(displayText, location[0].toFloat(), location[1].toFloat(), if (rainbow.get())
-            ColorUtils.rainbow(400000000L).rgb else color, shadow.get())
-
-        if (editMode && mc.currentScreen is GuiHudDesigner && editTicks <= 40)
-            fontRenderer.drawString("_", location[0] + fontRenderer.getStringWidth(displayText) + 2F,
-                    location[1].toFloat(), if (rainbow.get()) ColorUtils.rainbow(400000000L).rgb else color, shadow.get())
-
-        if (mc.currentScreen is GuiHudDesigner) {
-            RenderUtils.drawBorderedRect(
-                    location[0] - 2.toFloat(),
-                    location[1] - 2.toFloat(),
-                    (location[0] +
-                            fontRenderer.getStringWidth(displayText) + 2).toFloat(),
-                    location[1] + fontRenderer.FONT_HEIGHT.toFloat(), 3f, Int.MIN_VALUE,
-                    0
-            )
-        } else if (editMode) {
-            editMode = false
-            updateElement()
+        return when (str) {
+            "username" -> mc.getSession().username
+            "clientName" -> LiquidBounce.CLIENT_NAME
+            "clientVersion" -> "b${LiquidBounce.CLIENT_VERSION}"
+            "clientCreator" -> LiquidBounce.CLIENT_CREATOR
+            "fps" -> Minecraft.getDebugFPS().toString()
+            "date" -> DATE_FORMAT.format(System.currentTimeMillis())
+            "time" -> HOUR_FORMAT.format(System.currentTimeMillis())
+            "serverIp" -> ServerUtils.getRemoteIp()
+            else -> null // Null = don't replace
         }
     }
 
-    override fun destroyElement() {}
+    private fun multiReplace(str: String): String {
+        var lastPercent = -1
+        val result = StringBuilder()
+        for (i in str.indices) {
+            if (str[i] == '%') {
+                if (lastPercent != -1) {
+                    if (lastPercent + 1 != i) {
+                        val replacement = getReplacement(str.substring(lastPercent + 1, i))
+
+                        if (replacement != null) {
+                            result.append(replacement)
+                            lastPercent = -1
+                            continue
+                        }
+                    }
+                    result.append(str, lastPercent, i)
+                }
+                lastPercent = i
+            } else if (lastPercent == -1) {
+                result.append(str[i])
+            }
+        }
+
+        if (lastPercent != -1) {
+            result.append(str, lastPercent, str.length)
+        }
+
+        return result.toString()
+    }
+
+    /**
+     * Draw element
+     */
+    override fun drawElement(): Border? {
+        val color = Color(redValue.get(), greenValue.get(), blueValue.get()).rgb
+
+        val fontRenderer = fontValue.get()
+
+        fontRenderer.drawString(displayText, 0F, 0F, if (rainbow.get())
+            ColorUtils.rainbow(400000000L).rgb else color, shadow.get())
+
+        if (editMode && mc.currentScreen is GuiHudDesigner && editTicks <= 40)
+            fontRenderer.drawString("_", fontRenderer.getStringWidth(displayText) + 2F,
+                    0F, if (rainbow.get()) ColorUtils.rainbow(400000000L).rgb else color, shadow.get())
+
+        if (editMode && mc.currentScreen !is GuiHudDesigner) {
+            editMode = false
+            updateElement()
+        }
+
+        return Border(
+                -2F,
+                -2F,
+                fontRenderer.getStringWidth(displayText) + 2F,
+                fontRenderer.FONT_HEIGHT.toFloat()
+        )
+    }
 
     override fun updateElement() {
         editTicks += 5
@@ -109,8 +169,8 @@ class Text : Element() {
         displayText = if (editMode) displayString.get() else display
     }
 
-    override fun handleMouseClick(mouseX: Int, mouseY: Int, mouseButton: Int) {
-        if (isMouseOverElement(mouseX, mouseY) && mouseButton == 0) {
+    override fun handleMouseClick(x: Double, y: Double, mouseButton: Int) {
+        if (isInBorder(x, y) && mouseButton == 0) {
             if (System.currentTimeMillis() - prevClick <= 250L)
                 editMode = true
 
@@ -137,35 +197,10 @@ class Text : Element() {
         }
     }
 
-    override fun isMouseOverElement(mouseX: Int, mouseY: Int): Boolean {
-        val location = locationFromFacing
-        return mouseX >= location[0] && mouseY >= location[1] && mouseX <= location[0] + fontRenderer.getStringWidth(if (displayString.get().isEmpty()) "Text Element" else displayText) && mouseY <= location[1] + fontRenderer.FONT_HEIGHT
-    }
-
-    fun setText(s: String): Text {
-        displayString.set(s)
-        return this
-    }
-
     fun setColor(c: Color): Text {
         redValue.set(c.red)
         greenValue.set(c.green)
         blueValue.set(c.blue)
-        return this
-    }
-
-    fun setRainbow(b: Boolean): Text {
-        rainbow.set(b)
-        return this
-    }
-
-    fun setShadow(b: Boolean): Text {
-        shadow.set(b)
-        return this
-    }
-
-    fun setFontRenderer(fontRenderer: FontRenderer): Text {
-        this.fontRenderer = fontRenderer
         return this
     }
 

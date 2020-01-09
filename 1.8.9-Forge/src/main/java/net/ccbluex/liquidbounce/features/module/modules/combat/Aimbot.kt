@@ -1,8 +1,7 @@
 package net.ccbluex.liquidbounce.features.module.modules.combat
 
-import net.ccbluex.liquidbounce.event.EventState
 import net.ccbluex.liquidbounce.event.EventTarget
-import net.ccbluex.liquidbounce.event.MotionEvent
+import net.ccbluex.liquidbounce.event.StrafeEvent
 import net.ccbluex.liquidbounce.features.module.Module
 import net.ccbluex.liquidbounce.features.module.ModuleCategory
 import net.ccbluex.liquidbounce.features.module.ModuleInfo
@@ -30,17 +29,14 @@ class Aimbot : Module() {
     private val turnSpeedValue = FloatValue("TurnSpeed", 2F, 1F, 180F)
     private val fovValue = FloatValue("FOV", 180F, 1F, 180F)
     private val centerValue = BoolValue("Center", false)
-    private val lockValue = BoolValue("Lock", false)
+    private val lockValue = BoolValue("Lock", true)
     private val onClickValue = BoolValue("OnClick", false)
     private val jitterValue = BoolValue("Jitter", false)
 
     private val clickTimer = MSTimer()
 
     @EventTarget
-    fun onMotion(event: MotionEvent) {
-        if (event.eventState != EventState.PRE)
-            return
-
+    fun onStrafe(event: StrafeEvent) {
         if (mc.gameSettings.keyBindAttack.isKeyDown)
             clickTimer.reset()
 
@@ -63,11 +59,10 @@ class Aimbot : Module() {
                 if (centerValue.get())
                     RotationUtils.toRotation(RotationUtils.getCenter(entity.entityBoundingBox), true)
                 else
-                    RotationUtils.searchCenter(entity.entityBoundingBox, false, false, true, false).rotation,
+                    RotationUtils.searchCenter(entity.entityBoundingBox, false, false, true,
+                            false).rotation,
                 (turnSpeedValue.get() + Math.random()).toFloat()
         )
-
-        rotation.fixGcd()
 
         rotation.toPlayer(mc.thePlayer)
 
@@ -78,10 +73,10 @@ class Aimbot : Module() {
             val pitchNegative = Random.nextBoolean()
 
             if (yaw)
-                mc.thePlayer.rotationYaw += if (yawNegative) -RandomUtils.nextFloat(0f, 1F) else RandomUtils.nextFloat(0f, 1F)
+                mc.thePlayer.rotationYaw += if (yawNegative) -RandomUtils.nextFloat(0F, 1F) else RandomUtils.nextFloat(0F, 1F)
 
             if (pitch) {
-                mc.thePlayer.rotationPitch += if (pitchNegative) -RandomUtils.nextFloat(0f, 1F) else RandomUtils.nextFloat(0f, 1F)
+                mc.thePlayer.rotationPitch += if (pitchNegative) -RandomUtils.nextFloat(0F, 1F) else RandomUtils.nextFloat(0F, 1F)
                 if (mc.thePlayer.rotationPitch > 90)
                     mc.thePlayer.rotationPitch = 90F
                 else if (mc.thePlayer.rotationPitch < -90)

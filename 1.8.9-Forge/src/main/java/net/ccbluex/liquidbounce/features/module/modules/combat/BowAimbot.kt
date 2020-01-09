@@ -30,7 +30,7 @@ class BowAimbot : Module() {
     private val silentValue = BoolValue("Silent", true)
     private val predictValue = BoolValue("Predict", true)
     private val throughWallsValue = BoolValue("ThroughWalls", false)
-    private val predictSizeValue = FloatValue("PredictSize", 2f, 0.1f, 5f)
+    private val predictSizeValue = FloatValue("PredictSize", 2F, 0.1F, 5F)
     private val priorityValue = ListValue("Priority", arrayOf("Health", "Distance", "Direction"), "Direction")
     private val markValue = BoolValue("Mark", true)
 
@@ -41,10 +41,10 @@ class BowAimbot : Module() {
     }
 
     @EventTarget
-    fun onUpdate(event: UpdateEvent?) {
+    fun onUpdate(event: UpdateEvent) {
         target = null
 
-        if (mc.thePlayer.heldItem != null && mc.thePlayer.heldItem.item is ItemBow && mc.thePlayer.isUsingItem) {
+        if (mc.thePlayer.itemInUse?.item is ItemBow) {
             val entity = getTarget(throughWallsValue.get(), priorityValue.get()) ?: return
 
             target = entity
@@ -53,7 +53,7 @@ class BowAimbot : Module() {
     }
 
     @EventTarget
-    fun onRender3D(event: Render3DEvent?) {
+    fun onRender3D(event: Render3DEvent) {
         if (target != null && !priorityValue.get().equals("Multi", ignoreCase = true) && markValue.get())
             RenderUtils.drawPlatform(target, Color(37, 126, 255, 70))
     }

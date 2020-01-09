@@ -17,6 +17,7 @@ import net.ccbluex.liquidbounce.utils.timer.MSTimer
 import net.ccbluex.liquidbounce.value.BoolValue
 import net.minecraft.event.ClickEvent
 import net.minecraft.util.ChatComponentText
+import net.minecraft.util.EnumChatFormatting
 import net.minecraft.util.IChatComponent
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
@@ -37,13 +38,14 @@ class LiquidChat : Module() {
 
     init {
         state = true
+        array = false
     }
 
     private val jwtValue = object : BoolValue("JWT", false) {
         override fun onChanged(oldValue: Boolean, newValue: Boolean) {
-            if(getState()) {
-                setState(false)
-                setState(true)
+            if(state) {
+                state = false
+                state = true
             }
         }
     }
@@ -92,7 +94,18 @@ class LiquidChat : Module() {
          */
         override fun onPacket(packet: Packet) {
             when (packet) {
-                is ClientMessagePacket -> mc.thePlayer.addChatMessage(toChatComponent("§7[§a§lChat§7] §9${packet.user.name}: §7${packet.content}"))
+                is ClientMessagePacket -> {
+                    if (mc.thePlayer == null) {
+                        println("[LiquidChat] ${packet.user.name}: ${packet.content}")
+                        return
+                    }
+
+                    val chatComponent = ChatComponentText("§7[§a§lChat§7] §9${packet.user.name}: ")
+                    val messageComponent = toChatComponent(packet.content)
+                    chatComponent.appendSibling(messageComponent)
+
+                    mc.thePlayer.addChatMessage(chatComponent)
+                }
                 is ClientPrivateMessagePacket -> ClientUtils.displayChatMessage("§7[§a§lChat§7] §c(P)§9 ${packet.user.name}: §7${packet.content}")
                 is ClientErrorPacket -> {
                     val message = when(packet.message) {
@@ -137,8 +150,8 @@ class LiquidChat : Module() {
                     jwtToken = packet.token
                     jwtValue.set(true)
 
-                    setState(false)
-                    setState(true)
+                    state = false
+                    state = true
                 }
             }
         }
@@ -162,7 +175,7 @@ class LiquidChat : Module() {
 
             override fun execute(args: Array<String>) {
                 if(args.size > 1) {
-                    if (!getState()) {
+                    if (!state) {
                         chat("§cError: §7LiquidChat is disabled!")
                         return
                     }
@@ -185,7 +198,7 @@ class LiquidChat : Module() {
 
             override fun execute(args: Array<String>) {
                 if(args.size > 2) {
-                    if (!getState()) {
+                    if (!state) {
                         chat("§cError: §7LiquidChat is disabled!")
                         return
                     }
@@ -218,16 +231,16 @@ class LiquidChat : Module() {
                                 jwtToken = StringUtils.toCompleteString(args, 2)
                                 jwtValue.set(true)
 
-                                if(getState()) {
-                                    setState(false)
-                                    setState(true)
+                                if(state) {
+                                    state = false
+                                    state = true
                                 }
                             }else
                                 chatSyntax("chattoken set <token>")
                         }
 
                         args[1].equals("generate", true) -> {
-                            if (!getState()) {
+                            if (!state) {
                                 chat("§cError: §7LiquidChat is disabled!")
                                 return
                             }
@@ -250,7 +263,7 @@ class LiquidChat : Module() {
         LiquidBounce.CLIENT.commandManager.registerCommand(object : Command("chatadmin", emptyArray()) {
 
             override fun execute(args: Array<String>) {
-                if (!getState()) {
+                if (!state) {
                     chat("§cError: §7LiquidChat is disabled!")
                     return
                 }
@@ -278,8 +291,6 @@ class LiquidChat : Module() {
         })
     }
 
-    override fun showArray() = false
-
     override fun onDisable() {
         loggedIn = false
         client.disconnect()
@@ -306,7 +317,7 @@ class LiquidChat : Module() {
 
         if(jwtValue.get() && jwtToken.isEmpty()) {
             ClientUtils.displayChatMessage("§7[§a§lChat§7] §cError: §7No token provided!")
-            setState(false)
+            state = false
             return
         }
 
@@ -349,44 +360,48 @@ class LiquidChat : Module() {
             // Append the previous left overs.
             val part = string.substring(lastEnd, start)
             if (part.isNotEmpty()) {
-                if (component == null)
+                if (component == null) {
                     component = ChatComponentText(part)
-                else
+                    component.chatStyle.color = EnumChatFormatting.GRAY
+                } else
                     component.appendText(part)
             }
 
             lastEnd = end
 
-            var url = string.substring(start, end)
+            val url = string.substring(start, end)
 
             try {
-                if (URI(url).scheme == null)
-                    url = "http://$url"
+                if (URI(url).scheme != null) {
+                    // Set the click event and append the link.
+                    val link: IChatComponent = ChatComponentText(url)
 
-                // Set the click event and append the link.
-                val link: IChatComponent = ChatComponentText(url)
+                    link.chatStyle.chatClickEvent = ClickEvent(ClickEvent.Action.OPEN_URL, url)
+                    link.chatStyle.underlined = true
+                    link.chatStyle.color = EnumChatFormatting.GRAY
 
-                link.chatStyle.chatClickEvent = ClickEvent(ClickEvent.Action.OPEN_URL, url)
-                link.chatStyle.underlined = true
-
-                if (component == null)
-                    component = link
-                else
-                    component.appendSibling(link)
+                    if (component == null)
+                        component = link
+                    else
+                        component.appendSibling(link)
+                    continue
+                }
             } catch (e: URISyntaxException) {
-                if (component == null)
-                    component = ChatComponentText(url)
-                else
-                    component.appendText(url)
             }
 
+            if (component == null) {
+                component = ChatComponentText(url)
+                component.chatStyle.color = EnumChatFormatting.GRAY
+            } else
+                component.appendText(url)
         }
 
         // Append the rest of the message.
         val end = string.substring(lastEnd)
-        if (component == null)
+        if (component == null) {
             component = ChatComponentText(end)
-        else if (end.isNotEmpty())
+            component.chatStyle.color = EnumChatFormatting.GRAY
+        } else if (end.isNotEmpty())
             component.appendText(string.substring(lastEnd))
         return component
     }

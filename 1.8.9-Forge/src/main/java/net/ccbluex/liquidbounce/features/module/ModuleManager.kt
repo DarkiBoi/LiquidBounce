@@ -13,9 +13,11 @@ import net.ccbluex.liquidbounce.features.module.modules.movement.*
 import net.ccbluex.liquidbounce.features.module.modules.player.*
 import net.ccbluex.liquidbounce.features.module.modules.render.*
 import net.ccbluex.liquidbounce.features.module.modules.world.*
+import net.ccbluex.liquidbounce.features.module.modules.world.Timer
 import net.ccbluex.liquidbounce.utils.ClientUtils
 import net.minecraftforge.fml.relauncher.Side
 import net.minecraftforge.fml.relauncher.SideOnly
+import java.util.*
 
 /**
  * LiquidBounce Hacked Client
@@ -27,7 +29,8 @@ import net.minecraftforge.fml.relauncher.SideOnly
 @SideOnly(Side.CLIENT)
 object ModuleManager : Listenable {
 
-    private val modules = mutableListOf<Module>()
+    private val modules = TreeSet<Module> { module1, module2 -> module1.name.compareTo(module2.name) }
+    private val moduleClassMap = hashMapOf<Class<*>, Module>()
 
     init {
         LiquidBounce.CLIENT.eventManager.registerListener(this)
@@ -193,7 +196,9 @@ object ModuleManager : Listenable {
      * Register [module]
      */
     fun registerModule(module: Module) {
-        modules.add(module)
+        modules += module
+        moduleClassMap[module.javaClass] = module
+
         generateCommand(module)
         LiquidBounce.CLIENT.eventManager.registerListener(module)
     }
@@ -214,16 +219,16 @@ object ModuleManager : Listenable {
      */
     @SafeVarargs
     fun registerModules(vararg modules: Class<out Module>) {
-        for (moduleClass in modules)
-            registerModule(moduleClass)
+        modules.forEach(this::registerModule)
     }
 
     /**
      * Unregister module
      */
-    fun unregisterModule(module: Module?) {
+    fun unregisterModule(module: Module) {
         modules.remove(module)
-        LiquidBounce.CLIENT.eventManager.unregisterListener(module!!)
+        moduleClassMap.remove(module::class.java)
+        LiquidBounce.CLIENT.eventManager.unregisterListener(module)
     }
 
     /**
@@ -239,11 +244,6 @@ object ModuleManager : Listenable {
     }
 
     /**
-     * Sort all modules by name
-     */
-    fun sortModules() = modules.sortBy { it.getName() }
-
-    /**
      * Legacy stuff
      *
      * TODO: Remove later when everything is translated to Kotlin
@@ -253,23 +253,15 @@ object ModuleManager : Listenable {
      * Get module by [moduleClass]
      */
     @JvmStatic
-    fun getModule(moduleClass: Class<*>): Module? {
-        for (module in modules)
-            if (moduleClass == module.javaClass)
-                return module
-        return null
-    }
+    fun getModule(moduleClass: Class<*>) = moduleClassMap[moduleClass]
+
+    operator fun get(clazz: Class<*>) = getModule(clazz)
 
     /**
      * Get module by [moduleName]
      */
     @JvmStatic
-    fun getModule(moduleName: String?): Module? {
-        for (module in modules)
-            if (module.getName().equals(moduleName, ignoreCase = true))
-                return module
-        return null
-    }
+    fun getModule(moduleName: String?) = modules.find { it.name.equals(moduleName, ignoreCase = true) }
 
     /**
      * Get all modules
@@ -285,11 +277,7 @@ object ModuleManager : Listenable {
      * Handle incoming key presses
      */
     @EventTarget
-    private fun onKey(event: KeyEvent) {
-        for (module in modules)
-            if (module.keyBind == event.key)
-                module.toggle()
-    }
+    private fun onKey(event: KeyEvent) = modules.filter { it.keyBind == event.key }.forEach { it.toggle() }
 
     override fun handleEvents() = true
 }

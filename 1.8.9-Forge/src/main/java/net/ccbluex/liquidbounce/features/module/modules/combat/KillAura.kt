@@ -5,7 +5,7 @@ import net.ccbluex.liquidbounce.event.*
 import net.ccbluex.liquidbounce.features.module.Module
 import net.ccbluex.liquidbounce.features.module.ModuleCategory
 import net.ccbluex.liquidbounce.features.module.ModuleInfo
-import net.ccbluex.liquidbounce.features.module.ModuleManager
+import net.ccbluex.liquidbounce.features.module.ModuleManager.getModule
 import net.ccbluex.liquidbounce.features.module.modules.misc.AntiBot
 import net.ccbluex.liquidbounce.features.module.modules.misc.Teams
 import net.ccbluex.liquidbounce.features.module.modules.player.Blink
@@ -34,6 +34,7 @@ import net.minecraft.network.play.client.*
 import net.minecraft.potion.Potion
 import net.minecraft.util.BlockPos
 import net.minecraft.util.EnumFacing
+import net.minecraft.util.MathHelper
 import net.minecraft.world.WorldSettings
 import org.lwjgl.input.Keyboard
 import java.awt.Color
@@ -58,25 +59,21 @@ class KillAura : Module() {
 
     // CPS - Attack speed
     private val maxCPS: IntegerValue = object : IntegerValue("MaxCPS", 8, 1, 20) {
-
         override fun onChanged(oldValue: Int, newValue: Int) {
             val i = minCPS.get()
             if (i > newValue) set(i)
 
             attackDelay = TimeUtils.randomClickDelay(minCPS.get(), this.get())
         }
-
     }
 
     private val minCPS: IntegerValue = object : IntegerValue("MinCPS", 5, 1, 20) {
-
         override fun onChanged(oldValue: Int, newValue: Int) {
             val i = maxCPS.get()
             if (i < newValue) set(i)
 
             attackDelay = TimeUtils.randomClickDelay(this.get(), maxCPS.get())
         }
-
     }
 
     private val hurtTimeValue = IntegerValue("HurtTime", 10, 0, 10)
@@ -109,7 +106,6 @@ class KillAura : Module() {
     private val aacValue = BoolValue("AAC", false)
 
     // Turn Speed
-
     private val maxTurnSpeed: FloatValue = object : FloatValue("MaxTurnSpeed", 180f, 1f, 180f) {
         override fun onChanged(oldValue: Float, newValue: Float) {
             val v = minTurnSpeed.get()
@@ -125,12 +121,12 @@ class KillAura : Module() {
     }
 
     private val silentRotationValue = BoolValue("SilentRotation", true)
+    private val rotationStrafeValue = BoolValue("RotationStrafe", false)
     private val randomCenterValue = BoolValue("RandomCenter", true)
     private val outborderValue = BoolValue("Outborder", false)
     private val fovValue = FloatValue("FOV", 180f, 0f, 180f)
 
     // Predict
-
     private val predictValue = BoolValue("Predict", true)
 
     private val maxPredictSize: FloatValue = object : FloatValue("MaxPredictSize", 1f, 0.1f, 5f) {
@@ -222,6 +218,53 @@ class KillAura : Module() {
             return
         }
 
+        if (!rotationStrafeValue.get())
+            update()
+    }
+
+    /**
+     * Strafe event
+     */
+    @EventTarget
+    fun onStrafe(event: StrafeEvent) {
+        if (!rotationStrafeValue.get())
+            return
+
+        update()
+
+        if (!silentRotationValue.get())
+            return
+
+        currentTarget ?: return
+
+        val (yaw) = RotationUtils.targetRotation ?: return
+        var strafe = event.strafe
+        var forward = event.forward
+        val friction = event.friction
+
+        var f = strafe * strafe + forward * forward
+
+        if (f >= 1.0E-4F) {
+            f = MathHelper.sqrt_float(f)
+
+            if (f < 1.0F)
+                f = 1.0F
+
+            f = friction / f
+            strafe *= f
+            forward *= f
+
+            val yawSin = MathHelper.sin((yaw * Math.PI / 180F).toFloat())
+            val yawCos = MathHelper.cos((yaw * Math.PI / 180F).toFloat())
+
+            mc.thePlayer.motionX += strafe * yawCos - forward * yawSin
+            mc.thePlayer.motionZ += forward * yawCos + strafe * yawSin
+        }
+
+        event.cancelEvent()
+    }
+
+    fun update() {
         if (cancelRun || (noInventoryAttackValue.get() && (mc.currentScreen is GuiContainer ||
                         System.currentTimeMillis() - containerOpen < noInventoryDelayValue.get()))) return
 
@@ -231,7 +274,6 @@ class KillAura : Module() {
         if (target == null) {
             stopBlocking()
             return
-
         }
 
         // Target
@@ -245,7 +287,7 @@ class KillAura : Module() {
      * Update event
      */
     @EventTarget
-    fun onUpdate(event: UpdateEvent?) {
+    fun onUpdate(event: UpdateEvent) {
         if (cancelRun) {
             target = null
             currentTarget = null
@@ -275,7 +317,7 @@ class KillAura : Module() {
      * Render event
      */
     @EventTarget
-    fun onRender3D(event: Render3DEvent?) {
+    fun onRender3D(event: Render3DEvent) {
         if (cancelRun) {
             target = null
             currentTarget = null
@@ -431,16 +473,16 @@ class KillAura : Module() {
     private fun isEnemy(entity: Entity?): Boolean {
         if (entity is EntityLivingBase && (EntityUtils.targetDead || isAlive(entity)) && entity != mc.thePlayer) {
             if (!EntityUtils.targetInvisible && entity.isInvisible())
-                return false;
+                return false
 
             if (EntityUtils.targetPlayer && entity is EntityPlayer) {
                 if (entity.isSpectator || AntiBot.isBot(entity))
                     return false
 
-                if (EntityUtils.isFriend(entity) && !ModuleManager.getModule(NoFriends::class.java)!!.state)
+                if (EntityUtils.isFriend(entity) && !getModule(NoFriends::class.java)!!.state)
                     return false
 
-                val teams = ModuleManager.getModule(Teams::class.java) as Teams
+                val teams = getModule(Teams::class.java) as Teams
 
                 return !teams.state || !teams.isInYourTeam(entity)
             }
@@ -486,7 +528,7 @@ class KillAura : Module() {
         }
 
         // Extra critical effects
-        val criticals = ModuleManager.getModule(Criticals::class.java) as Criticals
+        val criticals = getModule(Criticals::class.java) as Criticals
 
         for (i in 0..2) {
             // Critical Effect
@@ -531,15 +573,13 @@ class KillAura : Module() {
                 mc.thePlayer.getDistanceToEntityBox(entity) < throughWallsRangeValue.get()
         ) ?: return false
 
-        val rotations = RotationUtils.limitAngleChange(RotationUtils.serverRotation, rotation,
+        val limitedRotation = RotationUtils.limitAngleChange(RotationUtils.serverRotation, rotation,
                 (Math.random() * (maxTurnSpeed.get() - minTurnSpeed.get()) + minTurnSpeed.get()).toFloat())
 
-        rotations.fixGcd()
-
         if (silentRotationValue.get())
-            RotationUtils.setTargetRotation(rotations)
+            RotationUtils.setTargetRotation(limitedRotation, if (aacValue.get()) 15 else 0)
         else
-            rotations.toPlayer(mc.thePlayer)
+            limitedRotation.toPlayer(mc.thePlayer)
 
         return true
     }
@@ -557,7 +597,7 @@ class KillAura : Module() {
             }
 
             if (raycastValue.get() && raycastedEntity is EntityLivingBase
-                    && (ModuleManager.getModule(NoFriends::class.java)!!.state || !EntityUtils.isFriend(raycastedEntity)))
+                    && (getModule(NoFriends::class.java)!!.state || !EntityUtils.isFriend(raycastedEntity)))
                 currentTarget = raycastedEntity
 
             hitable = currentTarget == raycastedEntity
@@ -594,7 +634,7 @@ class KillAura : Module() {
      */
     private val cancelRun: Boolean
         get() = mc.thePlayer.isSpectator || !isAlive(mc.thePlayer)
-                || ModuleManager.getModule(Blink::class.java)!!.state || ModuleManager.getModule(FreeCam::class.java)!!.state
+                || getModule(Blink::class.java)!!.state || getModule(FreeCam::class.java)!!.state
 
     /**
      * Check if [entity] is alive
@@ -621,6 +661,6 @@ class KillAura : Module() {
     /**
      * HUD Tag
      */
-    override fun getTag(): String = targetModeValue.get()
-
+    override val tag: String?
+        get() = targetModeValue.get()
 }
